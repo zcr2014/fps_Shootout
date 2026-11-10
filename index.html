@@ -1,0 +1,448 @@
+﻿<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>搜打撤行动</title>
+<link rel="stylesheet" href="css/style.css?v=36">
+</head>
+<body>
+  <canvas id="game-canvas"></canvas>
+  <!-- 画面后期：暗角与调色层 -->
+  <div id="vfx"></div>
+
+  <!-- ===== 瞄具视野遮罩（开镜时显示镜内分划）===== -->
+  <div id="scope-view" class="hidden">
+    <div class="sv-mask"></div>
+    <div class="sv-ring"></div>
+    <div id="sv-reticle" class="sv-reticle"></div>
+  </div>
+
+  <!-- ===== 特勤处 3D 漫游 HUD ===== -->
+  <div id="base-hud" class="hidden">
+    <div class="bw-top">
+      <span class="bw-title">特勤处</span>
+      <span class="bw-sub">SPECIAL OPERATIONS BASE</span>
+    </div>
+    <div class="bw-cross"></div>
+    <div class="bw-keys">WASD 移动 · 鼠标 转头 · 靠近设施按 <b>E</b> 查看 · <b>Esc</b> 返回大厅</div>
+    <button id="bw-range" class="bw-exit bw-range">靶场练枪</button>
+    <button id="bw-exit" class="bw-exit">返回大厅</button>
+    <div id="bw-tip" class="bw-tip hidden"></div>
+  </div>
+
+  <!-- ===== 靶场 HUD ===== -->
+  <div id="range-hud" class="hidden">
+    <div class="rg-top">
+      <div class="rg-title">靶场 <span>TRAINING RANGE</span></div>
+      <div class="rg-score"><span>得分</span><b id="rg-score">0</b></div>
+      <div class="rg-stat"><span>命中率</span><b id="rg-acc">0%</b></div>
+      <div class="rg-stat"><span>射击</span><b id="rg-shots">0</b></div>
+    </div>
+    <div class="rg-cross"></div>
+    <div id="rg-hit" class="rg-hit"></div>
+    <div class="rg-bottom">
+      <div class="rg-weapon"><b id="rg-weapon">M4A1</b><span id="rg-attach">—</span></div>
+      <div class="rg-ammo"><b id="rg-ammo">30</b> / <span id="rg-mag">30</span></div>
+      <div class="rg-keys">左键 射击 · 右键 开镜 · R 换弹 · B 换枪/配件 · Esc 返回特勤处</div>
+    </div>
+    <button id="rg-back" class="rg-back">返回特勤处</button>
+    <button id="rg-open" class="rg-open">换枪 / 配件</button>
+  </div>
+  <div id="range-panel" class="hidden">
+    <div class="rp-box">
+      <div class="rp-head"><span>靶场装备台</span><em>全部枪械与配件免费试用</em>
+        <button id="rp-close">关闭</button></div>
+      <div class="rp-guns" id="rp-guns"></div>
+      <div class="rp-attach" id="rp-attach"></div>
+    </div>
+  </div>
+
+  <!-- ===== 局内 HUD ===== -->
+  <div id="hud" class="hidden">
+    <div id="crosshair">
+      <span class="ch-line ch-t"></span><span class="ch-line ch-b"></span>
+      <span class="ch-line ch-l"></span><span class="ch-line ch-r"></span>
+      <span class="ch-dot"></span>
+    </div>
+    <div id="hitmarker">✕</div>
+    <div id="damage-vignette"></div>
+
+    <div id="status-panel">
+      <div class="hp-row">
+        <span class="label">生命</span>
+        <div class="bar"><div id="hp-fill"></div></div>
+        <span id="hp-num">100</span>
+      </div>
+      <div class="row"><span class="label">当前武器</span><span id="weapon-name" class="val">—</span></div>
+      <div class="row"><span class="label">近战</span><span id="melee-name" class="val">—</span></div>
+      <div class="row"><span class="label">弹药</span><span id="ammo-num" class="val">--</span></div>
+      <div class="row"><span class="label">护甲</span><span id="armor-num" class="val">无护甲</span></div>
+      <div class="row"><span class="label">急救包</span><span id="med-num" class="val">0</span></div>
+      <div class="row"><span class="label">负重</span><span id="weight-num" class="val">0.0 kg</span></div>
+      <div class="row"><span class="label">背包</span><span id="bag-num" class="val">0 / 12</span></div>
+      <div class="row"><span class="label">物资估值</span><span id="loot-num" class="gold">¥ 0</span></div>
+      <div class="row"><span class="label">击杀</span><span id="kill-num" class="val">0</span></div>
+    </div>
+
+    <div id="top-right">
+      <div id="raid-timer">04:00</div>
+      <canvas id="minimap" width="180" height="180"></canvas>
+    </div>
+
+    <div id="interact-tip" class="hidden">按 <b>E</b> 拾取物资</div>
+    <div id="reload-tip" class="hidden">装填中…</div>
+
+    <div id="extract-panel" class="hidden">
+      <div>撤离中…</div>
+      <div id="extract-text" class="dim"></div>
+      <div class="bar big"><div id="extract-fill"></div></div>
+    </div>
+
+    <div id="search-panel" class="hidden">
+      <div id="search-text">搜索中…</div>
+      <div class="bar big"><div id="search-fill"></div></div>
+    </div>
+
+    <div id="killfeed"></div>
+
+    <div id="skill-box">
+      <span class="sk-key">X</span>
+      <div class="sk-txt">
+        <span id="skill-name">技能</span>
+        <span id="skill-cd" class="dim">就绪</span>
+      </div>
+    </div>
+
+    <div id="bag-hint">按 <b>Tab</b> 打开背包</div>
+  </div>
+
+  <!-- ===== 局内背包面板（三角洲式格子背包）===== -->
+  <div id="bag-panel" class="hidden">
+    <div class="bp-box">
+      <div class="bp-head">
+        <span id="bp-title" class="bp-name">背包</span>
+        <span class="bp-tip">点击物品换装 / 存保险箱 · Tab 关闭</span>
+        <button id="bp-close">✕</button>
+      </div>
+      <div id="bp-grid" class="bp-grid"></div>
+      <div class="bp-safe-row">
+        <span class="bp-safe-label">保险箱 <span class="dim">阵亡不丢</span></span>
+        <div id="bp-safe" class="bp-safe"></div>
+      </div>
+      <div class="bp-foot">
+        <span id="bp-cap">容量 0 / 0 格</span>
+        <span id="bp-weight">负重 0 kg</span>
+        <span id="bp-value" class="gold">估值 ¥ 0</span>
+        <span id="bp-meds" class="dim">急救包 × 0</span>
+        <span id="bp-cards" class="dim">房卡 × 0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- 物品操作菜单（背包里点物品弹出）-->
+  <div id="bp-menu" class="bp-menu hidden"></div>
+
+  <!-- ===== 开箱搜索面板（三角洲式：干员装备 / 容器分区分格 / 附近搜索情况）===== -->
+  <div id="loot-panel" class="hidden">
+    <div class="lp-box">
+      <div class="lp-head">
+        <span class="lp-icon">⌕</span>
+        <span id="lp-title">正在搜索物资</span>
+        <button id="lp-close">✕</button>
+      </div>
+      <div class="lp-body">
+        <!-- 左：干员与随身装备（方形格子）-->
+        <aside class="lp-left">
+          <div class="lp-op">
+            <div class="lp-op-figure" id="lp-op-figure"><span class="lp-op-en">OPERATOR</span></div>
+            <div class="lp-op-name" id="lp-op-name">干员</div>
+          </div>
+          <div class="lp-gear" id="lp-gear"></div>
+        </aside>
+        <!-- 中：容器物资，按类别分区，方形格子 -->
+        <section class="lp-mid">
+          <div class="lp-mid-head">
+            <span id="lp-container-name">容器</span>
+            <span class="lp-mid-count" id="lp-count">0 件</span>
+          </div>
+          <div class="lp-zones" id="lp-zones"></div>
+        </section>
+        <!-- 右：附近搜索情况 -->
+        <aside class="lp-right">
+          <div class="lp-right-head">附近搜索情况</div>
+          <div class="lp-nearby" id="lp-nearby"></div>
+        </aside>
+      </div>
+      <div class="lp-foot">
+        <button id="lp-take-all">全部拾取</button>
+        <span id="lp-bag" class="dim">背包 0 / 0 格</span>
+        <span class="lp-tip">点击物品拾取 · Esc 关闭</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 大厅 ===== -->
+  <div id="hub" class="hub hidden">
+    <header class="hub-top">
+      <div class="brand">搜打撤行动<span>SEARCH · FIGHT · EXTRACT</span></div>
+      <nav class="hub-tabs">
+        <button data-tab="deploy" class="active">出击</button>
+        <button data-tab="base">特勤处</button>
+        <button data-tab="stash">仓库</button>
+        <button data-tab="market">市场</button>
+      </nav>
+      <div class="hub-money">资金 <b class="gold">¥ <span id="hub-money">0</span></b></div>
+    </header>
+
+    <div class="hub-body">
+      <section id="tab-deploy" class="tab active">
+        <h2>选择干员 <span class="dim">X 释放战术装备</span></h2>
+        <div id="operator-cards" class="op-cards"></div>
+        <h2>行动区域</h2>
+        <div id="map-cards" class="map-cards"></div>
+        <h2>装备配置</h2>
+        <div id="loadout-box" class="loadout"></div>
+        <div class="deploy-bar">
+          <div id="deploy-summary" class="deploy-summary"></div>
+          <button id="btn-deploy">出击</button>
+        </div>
+        <div class="key-hints">WASD 移动 · Shift 冲刺 · 空格 跳跃 · Ctrl 蹲下 · Z 趴下 · Q/E 探头 · 右键 开镜 · 左键攻击 · X 干员技能 · 1/2/3 主/副/近战 · V 挥刀 · R 换弹 · H 急救 · E 拾取 · F 搜索容器 · Tab 背包 · Esc 暂停</div>
+      </section>
+
+      <section id="tab-base" class="tab">
+        <!-- 总览：全息基地 + 部门卡片 -->
+        <div id="base-overview" class="base-view">
+          <div class="bo-stage">
+            <button id="btn-enter-base" class="bo-enter">进入特勤处 ▸</button>
+            <div class="bo-floor"></div>
+            <div class="bo-cols">
+              <div class="bo-col bo-left" id="base-col-left"></div>
+              <div class="bo-center">
+                <div class="holo-base">
+                  <span class="hb-pad"></span>
+                  <span class="hb-wl"></span>
+                  <span class="hb-wr"></span>
+                  <span class="hb-tower"><i></i><i></i><i></i></span>
+                  <span class="hb-ring"></span>
+                  <span class="hb-core"></span>
+                  <span class="hb-scan"></span>
+                </div>
+                <div class="bo-title">
+                  <h3>特勤处</h3>
+                  <span>SPECIAL OPERATIONS BASE</span>
+                </div>
+              </div>
+              <div class="bo-col bo-right" id="base-col-right"></div>
+            </div>
+            <svg id="base-links" class="bo-links" preserveAspectRatio="none"></svg>
+          </div>
+
+          <div class="base-lower">
+            <div class="base-panel">
+              <div class="panel-title">制造台 <span id="craft-cap" class="dim"></span></div>
+              <div id="craft-box" class="craft-box"></div>
+            </div>
+            <div class="base-panel">
+              <div class="panel-title">收藏室 <span id="collect-cap" class="dim"></span></div>
+              <div id="collection-box" class="collection-box"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 设施详情：全息设施 + 等级对比 + 升级后解锁 -->
+        <div id="base-detail" class="base-view hidden">
+          <button id="base-back" class="bd-back">‹ 返回特勤处</button>
+          <div class="bd-name-row">
+            <h3 id="bd-name">设施</h3>
+            <span id="bd-en" class="dim"></span>
+          </div>
+          <div id="bd-holo" class="bd-holo">
+            <span class="bh-pack bh-p1"></span>
+            <span class="bh-pack bh-p2"></span>
+            <span class="bh-pack bh-p3"></span>
+            <span class="bh-floor"></span>
+            <span class="bh-scan"></span>
+          </div>
+          <div class="bd-level">
+            <span id="bd-lv-old" class="bd-lv-old">Lv.1</span>
+            <span class="bd-arrow">»»</span>
+            <span id="bd-lv-new" class="bd-lv-new">Lv.2</span>
+          </div>
+          <div class="bd-unlock-title">升级后解锁</div>
+          <div id="bd-unlock-grid" class="bd-grid"></div>
+          <div id="bd-effect" class="bd-effect"></div>
+          <div id="bd-cost" class="bd-cost"></div>
+          <div class="bd-actions">
+            <button id="bd-range" class="bd-range hidden">进入 3D 靶场 ▸</button>
+            <button id="bd-upgrade" class="bd-upgrade">升级</button>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-stash" class="tab">
+        <h2>仓库 <span id="stash-cap" class="dim"></span></h2>
+        <div class="stash-layout">
+          <!-- 左：干员形象 + 武器位 -->
+          <div class="operator-col">
+            <div class="operator-card">
+              <span class="op-tag">干员</span>
+              <svg class="op-svg" viewBox="0 0 120 235" preserveAspectRatio="xMidYMax meet"
+                   aria-label="干员形象">
+                <defs>
+                  <linearGradient id="opBody" x1="0" y1="0" x2="1" y2="1">
+                    <stop offset="0" stop-color="#6b7566"/>
+                    <stop offset=".55" stop-color="#3e483e"/>
+                    <stop offset="1" stop-color="#242b26"/>
+                  </linearGradient>
+                  <linearGradient id="opVest" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0" stop-color="#5a6152"/>
+                    <stop offset="1" stop-color="#2b3129"/>
+                  </linearGradient>
+                </defs>
+                <g fill="url(#opBody)" stroke="#1b211c" stroke-width="1.2">
+                  <ellipse cx="60" cy="38" rx="13.5" ry="15"/>
+                  <rect x="53" y="51" width="14" height="11"/>
+                  <path d="M31 64 Q60 51 89 64 L93 132 Q60 144 27 132 Z"/>
+                  <path d="M32 69 L19 122 L27 127 L39 81 Z"/>
+                  <path d="M88 69 L101 122 L93 127 L81 81 Z"/>
+                  <rect x="37" y="132" width="19" height="58"/>
+                  <rect x="64" y="132" width="19" height="58"/>
+                  <rect x="33" y="188" width="25" height="12" fill="#181d19"/>
+                  <rect x="62" y="188" width="25" height="12" fill="#181d19"/>
+                </g>
+                <!-- 头盔与面罩 -->
+                <path d="M45 31 Q60 13 75 31 L76 37 Q60 20 44 37 Z" fill="#4c5547"/>
+                <path d="M47 41 Q60 37 73 41 L71 48 Q60 44 49 48 Z" fill="#1d241f" opacity=".9"/>
+                <!-- 防弹背心 -->
+                <path d="M36 71 Q60 58 84 71 L86 118 Q60 128 34 118 Z" fill="url(#opVest)"/>
+                <rect x="43" y="79" width="14" height="10" fill="#20261f"/>
+                <rect x="63" y="79" width="14" height="10" fill="#20261f"/>
+                <rect x="36" y="105" width="48" height="7" fill="#20261f"/>
+                <path d="M60 71 L60 118" stroke="#171c16" stroke-width="1.4" stroke-dasharray="4 4"/>
+              </svg>
+            </div>
+            <div class="gear-panel op-weapon-panel">
+              <div class="panel-title small">主武器 <span class="dim">5×2</span></div>
+              <div id="slot-weapon" class="equip-slot" data-kind="weapon"></div>
+            </div>
+            <div class="gear-panel op-weapon-panel">
+              <div class="panel-title small">副武器 <span class="dim">3×2 · 手枪</span></div>
+              <div id="slot-secondary" class="equip-slot" data-kind="secondary"></div>
+            </div>
+            <div class="gear-panel op-weapon-panel">
+              <div class="panel-title small">近战 / 刀皮 <span class="dim">2×2 · 阵亡不丢失</span></div>
+              <div id="slot-melee" class="equip-slot" data-kind="melee"></div>
+            </div>
+          </div>
+
+          <!-- 中：装备价值 + 各装备位 + 安全箱 -->
+          <div class="gear-col">
+            <div class="gear-value">
+              <span class="gv-label">装备价值</span>
+              <b id="gear-value" class="gold">¥ 0</b>
+              <span class="gv-tip">阵亡时这些会丢失</span>
+            </div>
+            <div class="gear-panel">
+              <div class="panel-title small">头盔 <span class="dim">2×2</span></div>
+              <div id="slot-helmet" class="equip-slot" data-kind="helmet"></div>
+            </div>
+            <div class="gear-panel">
+              <div class="panel-title small">护甲 <span class="dim">3×3</span></div>
+              <div id="slot-armor" class="equip-slot" data-kind="armor"></div>
+            </div>
+            <div class="gear-panel">
+              <div class="panel-title small">背包 <span id="bag-cap" class="dim"></span></div>
+              <div id="slot-bag" class="equip-slot" data-kind="bag"></div>
+            </div>
+            <div class="gear-panel attach-panel">
+              <div class="panel-title small">枪械改装 <span class="dim">主武器 · 点击切换</span></div>
+              <div id="attach-box" class="attach-box"></div>
+            </div>
+            <div class="gear-panel safe-panel">
+              <div class="panel-title small">安全箱 <span id="safe-cap" class="dim"></span></div>
+              <div id="safe-box" class="safe-box"></div>
+            </div>
+          </div>
+
+          <!-- 右：大仓库网格 -->
+          <div class="grid-panel">
+            <div class="panel-title">物资仓库 <span class="dim">拖动换格子，拖到同类物品上可交换</span></div>
+            <div id="stash-grid" class="stash-grid"></div>
+            <div class="panel-hint">装备 / 卸下：把物品拖到左侧对应的格子里；安全箱内的物资阵亡不会丢失</div>
+          </div>
+        </div>
+      </section>
+
+      <section id="tab-market" class="tab">
+        <h2>市场 <span class="dim">买入溢价 20%，卖出按品阶回收，价格每日波动</span></h2>
+        <div id="sell-rates" class="sell-rates"></div>
+        <div id="market-grid" class="item-grid"></div>
+      </section>
+
+      <aside id="inspector" class="inspector hidden"></aside>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+  </div>
+
+  <!-- ===== 结算 ===== -->
+  <div id="overlay-result" class="overlay hidden">
+    <div class="panel">
+      <h1 id="result-title">撤离成功</h1>
+      <p id="result-desc" class="dim"></p>
+      <div id="result-stats"></div>
+      <div id="result-items"></div>
+      <div class="money-line">仓库资金 <span id="result-money" class="gold">¥ 0</span></div>
+      <div class="btn-row">
+        <button id="btn-back-hub">返回仓库</button>
+        <button id="btn-again" class="ghost">再次出击</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== 暂停 ===== -->
+  <div id="overlay-pause" class="overlay hidden">
+    <div class="panel small">
+      <h1>行动暂停</h1>
+      <p class="dim">按 Esc 会暂停行动，可随时返回战斗</p>
+      <div class="btn-row">
+        <button id="btn-resume">继续战斗</button>
+        <button id="btn-quit" class="ghost danger">放弃行动（损失装备）</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 依赖与代码（按依赖顺序加载，全局命名空间 GAME） -->
+  <script src="libs/three.min.js"></script>
+  <script src="js/config.js?v=36"></script>
+  <script src="js/utils.js?v=36"></script>
+  <script src="js/data/items.js?v=36"></script>
+  <script src="js/data/maps.js?v=36"></script>
+  <script src="js/data/operators.js?v=36"></script>
+  <script src="js/systems/profile.js?v=36"></script>
+  <script src="js/data/base.js?v=36"></script>
+  <script src="js/systems/market.js?v=36"></script>
+  <script src="js/core/input.js?v=36"></script>
+  <script src="js/core/audio.js?v=36"></script>
+  <script src="js/world/map.js?v=36"></script>
+  <script src="js/world/loot.js?v=36"></script>
+  <script src="js/world/container.js?v=36"></script>
+  <script src="js/world/extraction.js?v=36"></script>
+  <script src="js/entities/bullet.js?v=36"></script>
+  <script src="js/world/skills.js?v=36"></script>
+  <script src="js/world/base3d.js?v=36"></script>
+  <script src="js/entities/gunmodel.js?v=36"></script>
+  <script src="js/entities/player.js?v=36"></script>
+  <script src="js/world/range.js?v=36"></script>
+  <script src="js/entities/enemy.js?v=36"></script>
+  <script src="js/ui/hud.js?v=36"></script>
+  <script src="js/ui/bagpanel.js?v=36"></script>
+  <script src="js/ui/lootpanel.js?v=36"></script>
+  <script src="js/ui/lobby.js?v=36"></script>
+  <script src="js/ui/menu.js?v=36"></script>
+  <script src="js/systems/game.js?v=36"></script>
+  <script src="js/main.js?v=36"></script>
+</body>
+</html>
+
+
