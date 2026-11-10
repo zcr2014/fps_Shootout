@@ -1,2 +1,1 @@
-# fps_Shootout
-It is a fps game.
+www.extraction—shooter.abrdns.com
